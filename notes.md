@@ -15,7 +15,7 @@
 **Signal one: the GPT-2 detector (perplexity).**
 - What it measures: how predictable each word is to a language model.
 - Why it differs: AI text tends to pick likely words, so it is predictable. Human text is more surprising.
-- What it can't see: predictable human writing. Formal, polished, textbook or news-style writing is also predictable, so it can score as AI. It also can't tell a human who edited AI text from the AI original.
+- What it can’t see: authorship. It rewards common words in short, ordinary sentences, so a real writer who writes plainly (for example, in a second language) can score as AI, and dense ornate prose can score as human. The people it is most likely to accuse are the ones with the least room to argue back.
 
 **Signal two: stylometry (the text as text).**
 - What it measures: how much sentence length varies, the ratio of unique words to total words, and how much punctuation is used.
@@ -26,7 +26,7 @@
 
 ## 3. The false positive
 
-A real writer submits a poem or essay they wrote themselves, in a formal style. Signal one scores it as predictable (high), and signal two scores it as even (high). The combined score lands in the high range.
+A real writer submits a poem or essay they wrote themselves, in a plain-writing style. Signal one scores it as predictable (high), and signal two scores it as even (high). The combined score lands in the high range.
 
 - What the label says to them: if it says "this was written by AI", they've been accused of cheating, which could end their relationship with the site.
 - Because of this, my high-confidence AI label has to be hard to reach. The threshold for "likely AI" should sit high, and the middle range should show a careful "not sure" message, not an accusation.

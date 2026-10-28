@@ -1,0 +1,2 @@
+{"timestamp": "2026-10-28T03:15:02+00:00", "content_id": "6799e073-2500-4b07-9700-4a2dfb423478", "creator_id": "me", "guess": "ai", "model_score": 0.7566, "style_score": null, "combined_score": null, "label": "placeholder: the real label comes in Milestone 5", "status": "decided"}
+{"timestamp": "2026-10-28T03:16:09+00:00", "creator_id": "me", "event": "rejected", "status": "rejected", "reason": "missing_or_empty_text"}
