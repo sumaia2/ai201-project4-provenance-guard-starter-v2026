@@ -1,173 +1,96 @@
 # Provenance Guard
 
-> ### 👋 Start here
->
-> **New to this repo? Read [RUNNING.md](RUNNING.md) first.**
->
-> Once `python test.py` passes, in one terminal:
->
-> ```bash
-> python app.py
-> ```
->
-> and in another:
->
-> ```bash
-> curl -X POST http://127.0.0.1:5000/ping \
->   -H "Content-Type: application/json" \
->   -d '{"message": "hello"}'
-> ```
->
-> That's a web service. Something sent it text and it sent something back.
-> Everything this unit is filling in the middle.
->
-> **The rest of this file is your submission.** Fill it in as you go.
-
----
-
-<!-- ─────────────────────────────────────────────────────────────────────────
-     Unit 7 asks for the first five sections. Unit 8 adds the five below.
-
-     Everything is pasted as TEXT. A pasted curl response gets full credit;
-     a picture of your terminal gets none.
-     ───────────────────────────────────────────────────────────────────────── -->
-
-<!-- ═══════════════════════ UNIT 7 — THE BUILD ═══════════════════════ -->
-
 ## What This Does
 
-<!-- The path a submission takes, from arriving to the label a reader sees.
-     Six or seven steps — this is the trace you wrote in Milestone 1. -->
+Provenance Guard is a small backend service a writing site could plug into. A site sends a piece of writing, and the service guesses whether a person or an AI tool wrote it, and sends back a confidence score and a plain-English label a reader would see.
 
+The path a submission takes:
 
+1. The site sends `POST /submit` with `text` and `creator_id`.
+2. The service checks the input. Missing, empty, too short or too long text, or a missing `creator_id`, gets a 400 error and is logged as a rejection.
+3. Signal one (detector.py, a GPT-2 model running locally) scores how predictable the text is.
+4. Signal two (stylometry.py) scores the shape of the text: sentence length variety and punctuation.
+5. scoring.py::combine_signals turns the two scores into one confidence score.
+6. scoring.py::score_to_label turns that score into one of three labels.
+7. The service writes everything to logs/audit.jsonl and returns the JSON.
 
----
+If a writer disagrees, they send `POST /appeal` with the `content_id` and their reasoning. The service records the appeal next to the original decision and moves the item to `under_review`.
 
 ## Signals and Scoring
 
-<!-- For each signal: what property it measures, why that might differ between
-     human and AI writing, and WHAT IT CAN'T SEE.
+**Signal one: the model signal (detector.py::model_signal).** It measures how predictable the text is to GPT-2 (perplexity), turned into a 0 to 1 score where higher means more likely AI. AI text tends to be predictable, so it scores high. **What it can't see:** authorship. It rewards plain words in short, ordinary sentences, so a real writer who writes plainly can score as AI. My own paragraph about forgetting my wallet scored 0.7535, while my email with specific names and my game blurb scored much lower (the blurb scored 0.0692).
 
-     The blind spot is not optional. If you can't name it you don't understand
-     the signal yet — and unit 8's attack set is built out of blind spots. -->
+**Signal two: the style signal (stylometry.py::style_signal).** It measures the text as text, with no understanding of meaning: how much sentence length varies, and how much punctuation (other than full stops) the text uses, each turned into a 0 to 1 score and averaged. Higher means more likely AI. I dropped type-token ratio from the score, because on short texts it scored my plain writing as more varied than an AI paragraph (0.46 against 0.41), the wrong way round. **What it can't see:** meaning. Anything that changes the shape without changing the substance moves it, for example typos, breaking up sentences or adding a quotation. Punctuation density barely changed across my test texts (0.025 to 0.064), so it adds little. Texts shorter than three sentences return 0.5.
 
-### Signal one — the model signal
+**Combining rule (scoring.py::combine_signals).** The combined score is 0.5 x model_score + 0.5 x style_score. If either signal is below 0.5, the combined score is capped at 0.64 (the AI threshold minus 0.01), so a high-confidence AI result needs both signals to lean AI. I chose this because a wrong accusation costs a real writer more than a missed AI piece. The weights are in config.py (WEIGHT_MODEL_SIGNAL and WEIGHT_STYLE_SIGNAL, both 0.5).
 
-**What it measures:**
-
-**Why that might differ between human and AI writing:**
-
-**What it can't see:**
-
-### Signal two — the style signal
-
-**What it measures:**
-
-**Why that might differ between human and AI writing:**
-
-**What it can't see:**
-
-### The combining rule
-
-<!-- Write the rule in words, then give the numbers. What happens when the two
-     signals disagree? -->
-
-**The rule:**
-
-**The numbers:**
-
-**Where it lives:** `scoring.py::combine_signals`
-
-<!-- ⚠️ The grader checks your code against that line. If your rule lives
-     somewhere else, say where. -->
-
-**A case where my two signals split, and what my rule does with it:**
-
-
-
----
+**Thresholds (config.py).** HUMAN_THRESHOLD is 0.35 and AI_THRESHOLD is 0.75. I first set the AI threshold at 0.65, and a paragraph I wrote myself (about forgetting my wallet) scored 0.6519 and was labeled "ai", a false positive. I raised it to 0.75, and the same paragraph is now "unsure". The cost is that more AI text lands in "unsure".
 
 ## Label Variants
 
-<!-- The exact text of all three labels, as a reader would see them, and the
-     score range each covers.
-
-     Write them for someone who has never heard the word "threshold". -->
-
-| Label | Score range | The exact text a reader sees |
+| Label | Score range | Exact text shown to a reader |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| High-confidence human | 0.00 to 0.35 | "We think this was probably written by a person." |
+| Unsure | 0.35 to 0.75 | "We can't tell for sure whether this was written by a person or an AI tool, so we haven't labeled it either way. If you wrote it yourself, nothing is wrong and you don't need to do anything." |
+| High-confidence AI | 0.75 to 1.00 | "We think this was probably written by an AI tool. This is a guess, not proof. If you wrote it yourself, you can appeal and your reasoning will be recorded for review." |
 
-**Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
-
-
-
----
+All three are reachable. Real outputs: my game blurb scored 0.1258 (human), my wallet paragraph scored 0.6519 (unsure), and a paragraph of evenly sized sentences about communication scored 0.8017 (ai).
 
 ## Sample Run
 
-<!-- One submission and one appeal, pasted as text: the request, the response,
-     and the log entries. -->
-
-**A submission**
-
-<!-- The response needs content_id, guess, confidence, label, AND both
-     signal scores - model_score and style_score. Unit 8's tools read those
-     two off the response, so leaving them out costs you next unit's
-     diagnostics. -->
-
-```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
-  -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
-```
-
-```json
+**Submission** (`POST /submit`):
 
 ```
-
-**An appeal**
-
-```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
-  -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d '{"text": "Effective communication is an important skill in the workplace today. It helps teams share ideas and solve problems together. Strong communication also improves productivity and builds trust. Organizations that value communication achieve better results over time.", "creator_id": "me"}'
 ```
 
-```json
+Response:
 
 ```
-
-**What the log shows afterwards**
-
-```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+{
+  "confidence": 0.8017,
+  "content_id": "37bf558e-e5b3-440b-b22e-7541fd000c6a",
+  "guess": "ai",
+  "label": "We think this was probably written by an AI tool. This is a guess, not proof. If you wrote it yourself, you can appeal and your reasoning will be recorded for review.",
+  "model_score": 0.6602,
+  "style_score": 0.9433
+}
 ```
 
-```json
+**Appeal** (`POST /appeal`):
 
 ```
+curl.exe -X POST http://127.0.0.1:5000/appeal -H "Content-Type: application/json" -d '{"content_id": "37bf558e-e5b3-440b-b22e-7541fd000c6a", "reasoning": "I wrote this myself for a class assignment."}'
+```
 
----
+Response:
+
+```
+{
+  "content_id": "37bf558e-e5b3-440b-b22e-7541fd000c6a",
+  "message": "Thank you. Your appeal has been recorded and this piece is now under review.",
+  "status": "under_review"
+}
+```
+
+**Resulting log entries** (`GET /log?limit=2`, from logs/audit.jsonl):
+
+```
+{"timestamp": "2026-10-28T04:05:55+00:00", "content_id": "37bf558e-e5b3-440b-b22e-7541fd000c6a", "creator_id": "me", "guess": "ai", "model_score": 0.6602, "style_score": 0.9433, "combined_score": 0.8017, "label": "We think this was probably written by an AI tool. ...", "status": "decided"}
+{"timestamp": "2026-10-28T04:09:12+00:00", "content_id": "37bf558e-e5b3-440b-b22e-7541fd000c6a", "creator_id": "me", "event": "appeal", "reasoning": "I wrote this myself for a class assignment.", "status": "under_review"}
+```
+
+**Bad input** (`POST /submit` with empty text):
+
+```
+{"error": "bad_request", "message": "text is required and must be a non-empty string."}
+```
 
 ## How I Used AI
 
-**Moment 1**
+**Moment 1:** I asked Claude to help me turn my route stubs into a working `POST /submit`. It gave me code that checked the input, called the model signal and wrote to the log. It ran, but my first test gave an IndentationError and then an UnboundLocalError because the imports were in the wrong place. I fixed the indentation by hand and moved the imports to the top of the function, then checked the route with curl.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
-
-**Moment 2**
-
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 2:** I asked Claude for a second signal and a combining rule. Its first version used three style measures, and when I tested it, my own paragraph scored as more AI-like than an AI paragraph because of the type-token ratio. I dropped that measure. A paragraph I wrote about forgetting my wallet was also labeled "ai" at an AI threshold of 0.65, so I raised the threshold to 0.75. I chose the five criteria numbers myself, and Claude formatted them. Claude drafted the three label texts, and I checked them by submitting text that produced each label.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
