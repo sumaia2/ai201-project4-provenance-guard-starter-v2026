@@ -42,61 +42,43 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. False positives
 
-<!-- Your criterion. It must name a number. -->
+Of 10 pieces of writing that I wrote myself (each at least 100 words), at most 1 receives the high-confidence AI label.
 
-
-
-**Why this target:**
-
-
+**Why this target:** a wrong accusation costs a real writer far more than a missed AI piece, because it can end their relationship with the site. My first signal (GPT-2 perplexity) measures how predictable text is, and careful or formal human writing is predictable too, so some false positives are likely. I allow 1 in 10 because 0 is unrealistic for a detector this simple, and 2 in 10 would mean accusing one writer in five.
 
 ---
 
-## 2.
+## 2. Score spread
 
-<!-- Your criterion. -->
+The average combined confidence score of 5 pieces that an AI tool generated is at least 0.30 higher than the average of 5 pieces that I wrote myself.
 
-
-
-**Why this target:**
-
-
+**Why this target:** my two signals measure different things (predictability, and sentence and word patterns), but neither is strong alone. A gap of 0.30 is about a third of the 0 to 1 scale, enough to put clearly-AI and clearly-human text in different label ranges. A smaller gap would mean the "unsure" label swallows nearly everything.
 
 ---
 
-## 3.
+## 3. Label coverage
 
-<!-- Your criterion. -->
+I can produce each of the three labels (likely AI, likely human, not sure) at least once by submitting text to POST /submit. That is 3 of 3 labels reached, each with a piece of text I name.
 
-
-
-**Why this target:**
-
-
+**Why this target:** the labels are chosen by score ranges in scoring.py::score_to_label, and a gap or overlap in the ranges would leave some scores with no label or the wrong one. This is a plain code check, so it should pass every time, and scoring.label_ranges() prints the ranges so I can see where a gap would be.
 
 ---
 
-## 4.
+## 4. The appeal path
 
-<!-- Your criterion. -->
+In 5 of 5 test appeals, each using a valid content_id from an earlier submission, POST /appeal returns the status `under_review`, and GET /log then shows that content_id with the status `under_review` and the writer's reasoning.
 
-
-
-**Why this target:**
-
-
+**Why this target:** the appeal is the only way a writer who was wrongly labeled can push back, so it must never fail silently. It is plain code with no model involved, so any failure would be a bug in my handler, not randomness. That is why the target is 5 of 5.
 
 ---
 
-## 5.
+## 5. Bad input
 
-<!-- Your criterion. -->
+In 5 of 5 tries, POST /submit with bad input returns HTTP status 400 and an error message saying what is wrong. The five inputs are: no `text` field, an empty string for `text`, text made only of spaces, a number instead of a string for `text`, and no `creator_id`.
 
-
-
-**Why this target:**
+**Why this target:** a detector that crashes or returns a score for empty text would give writers a label on nothing. The check is a few lines of code before either signal runs, so it is deterministic, and anything below 5 of 5 would mean a gap in that check.
 
 
 
