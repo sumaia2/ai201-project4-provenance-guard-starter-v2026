@@ -155,6 +155,8 @@ def health():
 def submit():
     """Take a piece of text, decide about it, log the decision, answer."""
     import detector
+    import stylometry
+    import scoring
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -188,6 +190,9 @@ def submit():
             "message": "text is too long (limit is 20000 characters).",
         }), 400
 
+    
+    
+
     try:
         model_score = detector.model_signal(text)
     except ValueError as exc:
@@ -196,20 +201,19 @@ def submit():
     except detector.DetectorUnavailable as exc:
         return jsonify({"error": "detector_unavailable", "message": str(exc)}), 503
 
-    content_id = str(uuid.uuid4())
+    style_score = stylometry.style_signal(text)
+    combined = scoring.combine_signals(model_score, style_score)
+    guess, label = scoring.score_to_label(combined)
 
-    # Placeholders until Milestones 4 and 5.
-    guess = "ai" if model_score > 0.5 else "human"
-    confidence = model_score
-    label = "placeholder: the real label comes in Milestone 5"
+    content_id = str(uuid.uuid4())
 
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
         guess=guess,
         model_score=model_score,
-        style_score=None,
-        combined_score=None,
+        style_score=style_score,
+        combined_score=combined,
         label=label,
         status="decided",
     )
@@ -217,10 +221,10 @@ def submit():
     return jsonify({
         "content_id": content_id,
         "guess": guess,
-        "confidence": confidence,
+        "confidence": combined,
         "label": label,
         "model_score": model_score,
-        "style_score": None,
+        "style_score": style_score,
     })
 
 

@@ -43,3 +43,11 @@ A real writer submits a poem or essay they wrote themselves, in a plain-writing 
 - In: `{"content_id": "...", "reasoning": "..."}`
 - Out: `{"content_id": "...", "status": "under_review", "message": "confirmation text"}`
 - Errors: an unknown content_id returns a 404.
+
+## Combining rule (scoring.py::combine_signals)
+
+1. Average the two signals equally: 0.5 x model_score + 0.5 x style_score.
+2. If either signal is below 0.5 (it leans human), cap the combined score just under the AI threshold (0.64), so the result can only be "unsure" or "human", never "AI".
+3. So a high-confidence AI label needs both signals to lean AI. If they disagree, the writer gets the unsure label.
+
+Why: signal one scored my plain, honest writing as AI (0.7566 for the wallet paragraph), and a wrong accusation costs a real writer more than a missed AI piece. Requiring agreement trades some missed AI text for fewer false accusations.
