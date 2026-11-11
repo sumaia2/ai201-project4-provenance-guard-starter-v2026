@@ -155,6 +155,8 @@ def health():
 def submit():
     """Take a piece of text, decide about it, log the decision, answer."""
     import detector
+    import re
+    import unicodedata
     import stylometry
     import scoring
 
@@ -189,8 +191,25 @@ def submit():
             "error": "bad_request",
             "message": "text is too long (limit is 20000 characters).",
         }), 400
-
     
+    has_control = any(
+           unicodedata.category(c) == "Cc" and c not in "\n\r\t" for c in text
+       )
+    if has_control:
+           audit.log_rejection(creator_id=creator_id, reason="control_characters")
+           return jsonify({
+               "error": "bad_request",
+               "message": "text contains control characters.",
+           }), 400
+
+    if len(re.findall(r"\w+", text)) < 3:
+           audit.log_rejection(creator_id=creator_id, reason="too_few_words")
+           return jsonify({
+               "error": "bad_request",
+               "message": "text needs at least 3 words to be judged.",
+           }), 400
+
+    text = unicodedata.normalize("NFKD", text)
     
 
     try:
