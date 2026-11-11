@@ -91,8 +91,9 @@ Response:
 **Moment 1:** I asked Claude to help me turn my route stubs into a working `POST /submit`. It gave me code that checked the input, called the model signal and wrote to the log. It ran, but my first test gave an IndentationError and then an UnboundLocalError because the imports were in the wrong place. I fixed the indentation by hand and moved the imports to the top of the function, then checked the route with curl.
 
 **Moment 2:** I asked Claude for a second signal and a combining rule. Its first version used three style measures, and when I tested it, my own paragraph scored as more AI-like than an AI paragraph because of the type-token ratio. I dropped that measure. A paragraph I wrote about forgetting my wallet was also labeled "ai" at an AI threshold of 0.65, so I raised the threshold to 0.75. I chose the five criteria numbers myself, and Claude formatted them. Claude drafted the three label texts, and I checked them by submitting text that produced each label.
+In Unit 8, Claude drafted my scenarios, diagnoses and README sections from my real outputs, and I ran every command.
 
-<!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
+
 
 ---
 
@@ -161,111 +162,63 @@ Run: `python run_attacks.py --set attack_set\attack_set`, 56 attacks, results in
 
 ## Run Log and Verdicts
 
-<!-- Your five criteria across three trials. `run_eval.py --label before`. -->
+Run with `python run_eval.py --label before` (results/run_2026-11-10_2347_before.md) plus `check_appeals.py`, three trials each. Scenarios are in scenarios.py. Criterion 1 was tested with ten of my own Instagram captions, which are shorter than the 100 words the criterion names. Results were identical in all three trials because neither signal is random.
 
-| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
-|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| # | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | My own writing labeled "ai" | at most 1 of 10 | 0 of 10 | 0 of 10 | 0 of 10 | MET |
+| 2 | AI average score minus my average | at least 0.30 | 0.3967 | 0.3967 | 0.3967 | MET |
+| 3 | All three labels reachable | 3 of 3 | 3 of 3 | 3 of 3 | 3 of 3 | MET |
+| 4 | Appeals reach under_review and the log | 5 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 5 | Bad input gets a 400 | 5 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+All five were met, yet the attack set broke the system 11 times. Criterion 1 was set too low: it passed because my test texts were short, casual captions that both signals score as human. The attack set's false-positive inputs were formal, student and non-native writing, and 5 of 8 were accused. A tighter criterion 1 would test formal and non-native writing, with at most 1 of 10 labeled "ai". I did not revise any criterion.
 
-```json
+**Diagnosis of the broken attacks (before):**
 
-```
-
-**Diagnoses**
-
-<!-- For each miss AND each broken attack: the stage and the mechanism.
-
-     Your service has five stages: the route, signal one, signal two, the
-     combining rule, and the label mapping.
-
-     Not a diagnosis:  "The evasion attacks got through."
-     A diagnosis:      "Four evasion inputs got through. All four had typos
-                        added to AI-generated text. My second signal measures
-                        word variety, and typos raise word variety — so it read
-                        them as more human. My combining rule weights that
-                        signal at 0.6, so it dragged the whole score down."
-
-     Look for a pattern. Five failures on one signal is one problem, not five. -->
-
-
-
----
+- **FP02 to FP06 (stage: combining rule and label mapping).** Both signals leaned AI at once (for example FP03: model 0.8051, style 0.7949, combined 0.8000). My "both must agree" rule only protects against one signal being wrong, so careful, predictable writing with even sentences passed it. All five combined scores (0.7524 to 0.8000) sat just above AI_THRESHOLD 0.75.
+- **EV05 (stage: both signals).** Model 0.3212 and style 0.3747: heavily edited AI text reads as human to both, so there was nothing for the rule to disagree about.
+- **PI02 (stage: signal one).** Model 0.2044, style 0.4445. No model reads the text as instructions here; the odd text scored as unpredictable, which signal one reads as human.
+- **MF03 to MF06 (stage: the route).** The input check only rejects empty or whitespace text, so control characters, punctuation only, one very long word and emoji only were scored. MF03 got model 0.0 and "human".
 
 ## The Improvement
 
-**What I changed:**
+**Change:** I raised AI_THRESHOLD in config.py from 0.75 to 0.82. Nothing else changed.
 
-**Which diagnosis pointed at it:**
+**Why:** the five false accusations all scored between 0.7524 and 0.8000, and EV10 (a real AI-style input) scored 0.8665, so 0.82 sits between them.
 
-### Attack Run — After
+**Attack Run: After** (`python run_attacks.py --set attack_set\attack_set --label after`, results/attack_run_2026-11-10_2358_after.md): **50 held, 6 broke.**
 
-<!-- Same format. `run_attacks.py --label after` -->
+| Family | Before: held / broke | After: held / broke |
+|---|---|---|
+| evasion (10) | 9 / 1 (EV05) | 9 / 1 (EV05) |
+| false_positive (8) | 3 / 5 | **8 / 0** |
+| prompt_injection (6) | 5 / 1 (PI02) | 5 / 1 (PI02) |
+| malformed MF (8) | 4 / 4 (MF03 to MF06) | 4 / 4 (MF03 to MF06) |
+| malformed requests RQ (12) | 12 / 0 | 12 / 0 |
+| flood_same_creator (12) | 12 / 0 | 12 / 0 |
 
+FP02 to FP06 changed from "ai" to "unsure", and EV10 stayed "ai".
 
+**Run Log: After** (results/run_2026-11-10_2358_after.md):
 
-**Did it help, and how do I know:**
+| # | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | My own writing labeled "ai" | at most 1 of 10 | 0 of 10 | 0 of 10 | 0 of 10 | MET |
+| 2 | AI average score minus my average | at least 0.30 | 0.3967 | 0.3967 | 0.3967 | MET |
+| 3 | All three labels reachable | 3 of 3 | 2 of 3 | 2 of 3 | 2 of 3 | MISSED |
+| 4 | Appeals reach under_review and the log | 5 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 5 | Bad input gets a 400 | 5 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
-
-
-
----
+**Did it help?** Yes on the problem it targeted: real writers accused went from 5 to 0, and broken attacks fell from 11 to 6. It cost me criterion 3 and some AI detection: my "ai" test text scored 0.8017, which is below 0.82, so it now lands in "unsure", and in the criterion 2 set the number of AI texts labeled "ai" fell from 3 of 5 to 2 of 5. Criterion 3 is missed because of the label mapping (scoring.py::score_to_label with AI_THRESHOLD): the "ai" label is still reachable (EV10 got it at 0.8665), but my test text no longer reaches it. The scores did not change, so criterion 2 is unchanged.
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
+- **EV05 (edited AI text passes as human).** I would add a third signal that does not depend on predictability or sentence shape. I stopped because the unit allows one change.
+- **PI02.** Signal one reads odd text as human. I would not patch this one, because it is the same weakness as EV05.
+- **MF03 to MF06 (junk is scored).** I would add input validation in app.py that requires a minimum number of real words and rejects control characters. I stopped at one change.
+- **Criterion 3.** I would replace the "ai" test text with one that scores above 0.82, such as the EV10 input.
 
-
-
-**The trade I'd make if this ran for real:**
-
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
-
-
-
-<!-- ═════════════════════════════════════════════════════════════════════
-
-     SUBMISSION CHECKLIST — unit 7
-
-       [ ] criteria.md has five numbered criteria, each naming a target
-       [ ] Each has a reason underneath
-       [ ] POST /submit returns content_id, guess, confidence, label,
-           model_score and style_score
-       [ ] Two signals that measure DIFFERENT things, each with a named blind spot
-       [ ] Three label variants, all reachable, written out in full
-       [ ] POST /appeal changes status and writes to the log
-       [ ] Signals and Scoring names scoring.py::combine_signals
-       [ ] Sample Run: a submission AND an appeal, as pasted text
-       [ ] At least four new commits
-       [ ] Repository URL submitted — WRITE IT DOWN
-
-     SUBMISSION CHECKLIST — unit 8
-
-       [ ] Rate limiting on /submit, with your numbers justified
-       [ ] The pasted run of status codes showing 429
-       [ ] Audit log with all nine fields, recording rejections too
-       [ ] The attack set run IN FULL, every input with an outcome
-       [ ] Ten audit log entries pasted as text
-       [ ] Five criteria across three trials
-       [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
-       [ ] One improvement, with Attack Run — After
-       [ ] What's Still Broken, including the production trade
-       [ ] At least four new commits
-       [ ] The SAME repository URL as last unit
-
-     Do not delete and recreate this repository.
-     ═════════════════════════════════════════════════════════════════════ -->
-
----
+**The trade I would make in production:** fewer wrong accusations means more AI text gets through. I would keep the 0.82 threshold, because a wrong accusation costs a real writer far more than a missed AI piece. The writers who pay for this are the ones whose AI-like text now lands in "unsure" and goes unlabeled, which is a cost to the site, not to a person.
 
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
