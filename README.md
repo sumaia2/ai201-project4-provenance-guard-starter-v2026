@@ -98,49 +98,66 @@ Response:
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+I limit POST /submit to **10 per minute and 100 per day** per caller (config.py: RATE_LIMIT_PER_MINUTE and RATE_LIMIT_PER_DAY, switched on with RATE_LIMITING_ENABLED). A real writer submitting their own work sends a few pieces an hour, so 10 a minute never gets in their way, while a script sending hundreds of variations to map my thresholds hits the limit after the first ten. 100 a day stops a slower script, and is still well above what a writer needs. A caller counts as their creator_id when one is given, otherwise their address.
 
-**Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
-
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
-
-**The run of status codes when I pushed past it:**
-
-<!-- python run_attacks.py --flood 15 -->
+Flood test (`python run_attacks.py --flood 15`):
 
 ```
-
+200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
 ```
-
----
 
 ## Attack Run — Before
 
-<!-- Every attack with its outcome and a held-or-broke mark.
-     `run_attacks.py --label before` produces the table. -->
+Run: `python run_attacks.py --set attack_set\attack_set`, 56 attacks, results in results/attack_run_2026-11-10_2321.md. **45 held, 11 broke.**
 
+| Family | Attacks | Held | Broke |
+|---|---|---|---|
+| evasion | 10 | 9 | 1 (EV05) |
+| false_positive | 8 | 3 | 5 (FP02 to FP06) |
+| prompt_injection | 6 | 5 | 1 (PI02) |
+| malformed (MF) | 8 | 4 | 4 (MF03 to MF06) |
+| malformed requests (RQ) | 12 | 12 | 0 |
+| flood_same_creator | 12 | 12 | 0 |
 
+| ID | Result | Mark |
+|---|---|---|
+| EV01 to EV04, EV06 to EV09 | unsure (0.373 to 0.693) | HELD |
+| EV05 (heavy human editing) | human 0.348 | BROKE |
+| EV10 | ai 0.867 | HELD |
+| FP01, FP07, FP08 | unsure (0.526 to 0.656) | HELD |
+| FP02 | ai 0.772 | BROKE |
+| FP03 | ai 0.800 | BROKE |
+| FP04 | ai 0.777 | BROKE |
+| FP05 | ai 0.766 | BROKE |
+| FP06 | ai 0.752 | BROKE |
+| PI01, PI03 to PI06 | unsure (0.495 to 0.610) | HELD |
+| PI02 | human 0.325 | BROKE |
+| MF01, MF02, MF08 | 400 | HELD |
+| MF03 (control characters) | 200, human 0.250 | BROKE |
+| MF04 (only punctuation) | 200, unsure 0.506 | BROKE |
+| MF05 (one very long word) | 200, unsure 0.740 | BROKE |
+| MF06 (emoji only) | 200, unsure 0.740 | BROKE |
+| MF07 (right-to-left script) | 200, unsure 0.703 | HELD |
+| RQ01 to RQ12 | 400 | HELD |
+| FL01_01 to FL01_10 | 200 | HELD |
+| FL01_11, FL01_12 | 429 | HELD |
 
-**Ten audit log entries from the run**
+**Worst outcome:** FP03, a careful non-native English speaker, was labeled "ai" with a score of 0.8000. That is the writer with the least room to argue back, and the one I would least want to explain to a person whose own work was accused.
 
-<!-- Choose entries that show the interesting failures, not the ten easiest. -->
-
-```json
+**Audit log entries** (from logs/audit.jsonl, one rejection included):
 
 ```
-
-**The single worst outcome** — the one I'd least want to explain to a writer
-whose work got caught by it:
-
-
-
----
+{"creator_id": "me", "event": "rejected", "reason": "missing_or_empty_text", "status": "rejected", "timestamp": "2026-10-28T03:16:09+00:00"}
+{"creator_id": "flood_tester", "event": "rejected", "limit": "10 per 1 minute", "reason": "rate_limited", "status": "rejected", "timestamp": "2026-11-11T04:17:37+00:00"}
+{"creator_id": "flood_tester", "event": "rejected", "limit": "10 per 1 minute", "reason": "rate_limited", "status": "rejected", "timestamp": "2026-11-11T04:17:37+00:00"}
+{"creator_id": "flood_tester", "event": "rejected", "limit": "10 per 1 minute", "reason": "rate_limited", "status": "rejected", "timestamp": "2026-11-11T04:17:37+00:00"}
+{"creator_id": "flood_tester", "event": "rejected", "limit": "10 per 1 minute", "reason": "rate_limited", "status": "rejected", "timestamp": "2026-11-11T04:17:37+00:00"}
+{"creator_id": "flood_tester", "event": "rejected", "limit": "10 per 1 minute", "reason": "rate_limited", "status": "rejected", "timestamp": "2026-11-11T04:17:37+00:00"}
+{"combined_score": 0.3479, "content_id": "15b9badf-6b36-4bef-b984-6c6551067d68", "creator_id": "attacker_EV05", "guess": "human", "label": "We think this was probably written by a person.", "model_score": 0.3212, "status": "decided", "style_score": 0.3747, "timestamp": "2026-11-11T04:21:41+00:00"}
+{"combined_score": 0.8665, "content_id": "b9b5a50f-cbcb-4261-aa14-bbbe22d0db1e", "creator_id": "attacker_EV10", "guess": "ai", "label": "We think this was probably written by an AI tool. This is a guess, not proof. If you wrote it yourself, you can appeal and your reasoning will be recorded for review.", "model_score": 0.9792, "status": "decided", "style_score": 0.7538, "timestamp": "2026-11-11T04:21:43+00:00"}
+{"combined_score": 0.7723, "content_id": "447d6321-56e5-448f-8c5f-2262ba0540fa", "creator_id": "attacker_FP02", "guess": "ai", "label": "We think this was probably written by an AI tool. This is a guess, not proof. If you wrote it yourself, you can appeal and your reasoning will be recorded for review.", "model_score": 0.7387, "status": "decided", "style_score": 0.8059, "timestamp": "2026-11-11T04:21:44+00:00"}
+{"combined_score": 0.8, "content_id": "a5f04f10-2c04-4c36-b958-e92cef859128", "creator_id": "attacker_FP03", "guess": "ai", "label": "We think this was probably written by an AI tool. This is a guess, not proof. If you wrote it yourself, you can appeal and your reasoning will be recorded for review.", "model_score": 0.8051, "status": "decided", "style_score": 0.7949, "timestamp": "2026-11-11T04:21:44+00:00"}
+```
 
 ## Run Log and Verdicts
 
