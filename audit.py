@@ -155,3 +155,9 @@ def clear() -> int:
 def entries_for(content_id: str) -> list[dict]:
     """Every entry touching one content id, in order."""
     return [e for e in read_entries() if e.get("content_id") == content_id]
+
+
+
+def log_request(**fields) -> dict:
+    """One record per HTTP request: what came in, what went out, how long."""
+    return _append({"timestamp": _now(), "event": "request", **fields})

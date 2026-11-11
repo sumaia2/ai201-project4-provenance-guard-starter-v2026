@@ -23,15 +23,46 @@ Routes:
     GET  /log         the audit log. Already works
     GET  /health      is the service up, and is the model loaded
 """
-
+import time
 import uuid
 
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 
 import audit
 import config
 
 app = Flask(__name__)
+
+
+@app.before_request
+def _start_timer():
+    g.t0 = time.perf_counter()
+
+
+@app.after_request
+def _log_request(response):
+    if request.method == "POST" and request.path in ("/submit", "/appeal"):
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            payload = {}
+        body = response.get_json(silent=True)
+        if not isinstance(body, dict):
+            body = {}
+        text = payload.get("text")
+        creator = payload.get("creator_id")
+        audit.log_request(
+            path=request.path,
+            creator_id=creator if isinstance(creator, str) else None,
+            input_chars=len(text) if isinstance(text, str) else None,
+            input_preview=text[:80] if isinstance(text, str) else None,
+            status_code=response.status_code,
+            content_id=body.get("content_id"),
+            guess=body.get("guess"),
+            confidence=body.get("confidence"),
+            error=body.get("error"),
+            duration_ms=round((time.perf_counter() - g.get("t0", time.perf_counter())) * 1000, 1),
+        )
+    return response
 
 
 # ── Rate limiting — UNIT 8 ────────────────────────────────────────────────────
