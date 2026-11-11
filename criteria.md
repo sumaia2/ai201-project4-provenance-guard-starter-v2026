@@ -84,33 +84,39 @@ In 5 of 5 tries, POST /submit with bad input returns HTTP status 400 and an erro
 
 ---
 
-<!-- ─────────────────────────────────────────────────────────────────────────
-     UNIT 8 — read this before you change anything above.
 
-     If a criterion turns out to be BROKEN rather than merely unmet, you can
-     revise it, and that earns credit. But never delete or edit the original
-     line. Add the revision underneath, like this:
+---
 
-         ## 2. Uncertain cases land in the unsure band
+# Capstone criteria (Unit 9)
 
-         The system handles uncertain cases well.
+These are for the hardening extension: input validation, per-request logging with duration, and the run path. They were written before any capstone results.
 
-         **Why this target:** ...
+## 1. Junk input is rejected
 
-         > **Revised in unit 8:** Text I judged borderline scores between
-         > 0.4 and 0.6 in at least 4 of 5 cases.
-         >
-         > **Why revised:** "well" gave me nothing to check. I couldn't
-         > reach a verdict from it at all.
+Four junk inputs sent to POST /submit each return HTTP 400: a text made only of control characters, a text made only of punctuation, a text that is one 200-character word, and a text made only of emoji. That is 4 of 4.
 
-     That's a revision because the criterion couldn't be MEASURED.
+**Why this target:** in the Unit 8 attack run my service scored all four and called the control-character one "human" at 0.250. A score on text with no real words accuses or clears a writer on nothing, so I allow no exceptions, and 3 of 4 would mean one kind of junk still gets through.
 
-     Lowering a target because you missed it is not a revision, and it costs
-     you the point:
+## 2. Every request leaves a log record with a duration
 
-         ✗ "At most 1 of 10 of my own pieces flagged as AI" → "at most 3
-            of 10", because 1 of 10 turned out to be hard.
+I send 20 requests to POST /submit: 10 valid texts and 10 invalid ones, each with its own creator_id so the rate limiter is not involved. Each of the 20 produces an entry in logs/audit.jsonl with `"event": "request"`, a `status_code` and a `duration_ms`. That is 20 of 20.
 
-     A number you missed stays where it is, gets diagnosed, and gets a fix
-     attempted. That's where the points are.
-     ───────────────────────────────────────────────────────────────────────── -->
+**Why this target:** in Unit 8 a request that was rejected left no trace of how long it took, and an attack that shows up only as an absence is one I would never find. The log is plain code with no model in it, so any miss would be a bug in my hook and not randomness.
+
+## 3. A warm valid request is fast
+
+After the model has loaded (at least one earlier request to the running service), a valid 30-word text gets a response in under 3 seconds, in at least 9 of 10 requests, measured by the `duration_ms` field in the log.
+
+**Why this target:** the first request took 39,242 ms because GPT-2 loads then, so this criterion is about warm requests only and says so. Nothing in the pipeline is random, so after warm-up I expect almost all requests to be fast, and 9 of 10 leaves room for one slow request from the machine itself.
+
+## 4. Bad requests fail cleanly and leave a record
+
+Five bad requests get HTTP 400 (never a 500) and each leaves an entry with `"event": "rejected"` in the log: no text field, a text of 25,000 characters, text given as a number, a body that is a JSON array and not an object, and a missing creator_id. That is 5 of 5.
+
+**Why this target:** a crash on a malformed input is one of the most common real failures, and in Unit 8 my attack set found these paths. A 400 without a record would hide the failure, so I require both.
+
+## 5. What already worked still works
+
+(a) The 11th valid submission from one creator_id inside a minute gets HTTP 429. (b) In 5 of 5 tests, POST /appeal on a real content_id returns `"status": "under_review"` and the appeal appears in the log. Both must hold.
+
+**Why this target:** this unit adds code to the same route, and an extension that breaks the rate limiter or the appeal path is a regression. The appeal is the only thing a wrongly accused writer can do, so it has to work every time.
