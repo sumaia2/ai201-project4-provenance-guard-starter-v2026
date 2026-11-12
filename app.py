@@ -24,6 +24,7 @@ Routes:
     GET  /health      is the service up, and is the model loaded
 """
 import time
+import os
 import uuid
 
 from flask import Flask, g, jsonify, request
@@ -341,6 +342,10 @@ def main():
     print("    -d '{\"message\": \"hello\"}'")
     print()
     # debug=True hands out an interactive debugger, so it's local-only — see config.py
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not config.DEBUG:
+        import detector
+        print("Loading the detector model now...", flush=True)
+        print(detector.warm_up(), flush=True)
     app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG)
 
 
