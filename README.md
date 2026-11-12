@@ -86,7 +86,7 @@ Response:
 {"error": "bad_request", "message": "text is required and must be a non-empty string."}
 ```
 
-## How I Used AI
+## How I Used AI (Units 7 and 8)
 
 **Moment 1:** I asked Claude to help me turn my route stubs into a working `POST /submit`. It gave me code that checked the input, called the model signal and wrote to the log. It ran, but my first test gave an IndentationError and then an UnboundLocalError because the imports were in the wrong place. I fixed the indentation by hand and moved the imports to the top of the function, then checked the route with curl.
 
@@ -160,7 +160,7 @@ Run: `python run_attacks.py --set attack_set\attack_set`, 56 attacks, results in
 {"combined_score": 0.8, "content_id": "a5f04f10-2c04-4c36-b958-e92cef859128", "creator_id": "attacker_FP03", "guess": "ai", "label": "We think this was probably written by an AI tool. This is a guess, not proof. If you wrote it yourself, you can appeal and your reasoning will be recorded for review.", "model_score": 0.8051, "status": "decided", "style_score": 0.7949, "timestamp": "2026-11-11T04:21:44+00:00"}
 ```
 
-## Run Log and Verdicts
+## Run Log and Verdicts (Unit 8)
 
 Run with `python run_eval.py --label before` (results/run_2026-11-10_2347_before.md) plus `check_appeals.py`, three trials each. Scenarios are in scenarios.py. Criterion 1 was tested with ten of my own Instagram captions, which are shorter than the 100 words the criterion names. Results were identical in all three trials because neither signal is random.
 
@@ -181,7 +181,7 @@ All five were met, yet the attack set broke the system 11 times. Criterion 1 was
 - **PI02 (stage: signal one).** Model 0.2044, style 0.4445. No model reads the text as instructions here; the odd text scored as unpredictable, which signal one reads as human.
 - **MF03 to MF06 (stage: the route).** The input check only rejects empty or whitespace text, so control characters, punctuation only, one very long word and emoji only were scored. MF03 got model 0.0 and "human".
 
-## The Improvement
+## The Improvement (Unit 8)
 
 **Change:** I raised AI_THRESHOLD in config.py from 0.75 to 0.82. Nothing else changed.
 
@@ -212,7 +212,7 @@ FP02 to FP06 changed from "ai" to "unsure", and EV10 stayed "ai".
 
 **Did it help?** Yes on the problem it targeted: real writers accused went from 5 to 0, and broken attacks fell from 11 to 6. It cost me criterion 3 and some AI detection: my "ai" test text scored 0.8017, which is below 0.82, so it now lands in "unsure", and in the criterion 2 set the number of AI texts labeled "ai" fell from 3 of 5 to 2 of 5. Criterion 3 is missed because of the label mapping (scoring.py::score_to_label with AI_THRESHOLD): the "ai" label is still reachable (EV10 got it at 0.8665), but my test text no longer reaches it. The scores did not change, so criterion 2 is unchanged.
 
-## What's Still Broken
+## What's Still Broken (Unit 8)
 
 - **EV05 (edited AI text passes as human).** I would add a third signal that does not depend on predictability or sentence shape. I stopped because the unit allows one change.
 - **PI02.** Signal one reads odd text as human. I would not patch this one, because it is the same weakness as EV05.
