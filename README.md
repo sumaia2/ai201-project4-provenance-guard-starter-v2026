@@ -221,4 +221,19 @@ FP02 to FP06 changed from "ai" to "unsure", and EV10 stayed "ai".
 
 **The trade I would make in production:** fewer wrong accusations means more AI text gets through. I would keep the 0.82 threshold, because a wrong accusation costs a real writer far more than a missed AI piece. The writers who pay for this are the ones whose AI-like text now lands in "unsure" and goes unlabeled, which is a cost to the site, not to a person.
 
+
+## What This Extends
+
+This extends Provenance Guard, the service I built in Units 7 and 8. POST /submit scores a piece of writing with two signals, returns one of three labels, and POST /appeal records a writer's challenge. The new work in this unit is a hardening layer around /submit: stricter input validation, a duration and outcome record for every request, and a documented run path.
+
+## The Shape
+
+**Shape B: harden against failure.** The Unit 8 attack set showed that my service accepted junk it could not honestly score: control characters (MF03, scored "human" at 0.250), punctuation only (MF04), one very long word (MF05) and emoji only (MF06). This unit I added validation that rejects input without at least 3 real words, or with control characters, before either signal runs. I also log every request with its duration and outcome, failures included.
+
+**Out of scope:** I am not adding or changing a signal, so edited AI text (EV05) stays unfixed. I am not changing the thresholds, since the AI threshold stays at 0.82 as it was after Unit 8. I am not changing the labels or the appeal path. I am not hosting it, because it loads GPT-2 locally and does not fit a free host's 512 MB.
+
+## Running It
+
+Path B: local with logs. The exact start command, the Python version, the dependencies and the model size are in RUNNING.md, which I tested from a fresh clone.
+
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
