@@ -236,4 +236,100 @@ This extends Provenance Guard, the service I built in Units 7 and 8. POST /submi
 
 Path B: local with logs. The exact start command, the Python version, the dependencies and the model size are in RUNNING.md, which I tested from a fresh clone.
 
+
+## Instrumentation
+
+Every POST to /submit and /appeal writes one record to logs/audit.jsonl from a Flask hook (app.py::_log_request, written by audit.py::log_request). Each record has: timestamp, event ("request"), path, creator_id, input_chars, input_preview (first 80 characters), status_code, content_id, guess, confidence, error and duration_ms. Failed requests are logged too: a rejected input leaves a request entry with its status_code and error, plus a "rejected" entry with the reason (for example too_few_words, control_characters or rate_limited). I tested the failure path by sending "!!! ???", which returned a 400 and left both entries in 22 ms.
+
+Ten request entries from logs/audit.jsonl (capstone "before" run; five accepted, five rejected with a 400):
+
+```
+{"timestamp": "2026-11-11T23:58:31+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_warmup", "input_chars": 155, "input_preview": "I went to the store yesterday and forgot my wallet, which was embarrassing. The ", "status_code": 200, "content_id": "bb0d8d69-0440-4c5c-84c5-f8f3ec1e8ed4", "guess": "unsure", "confidence": 0.5868, "error": null, "duration_ms": 8857.8}
+{"timestamp": "2026-11-11T23:58:33+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_c2_valid_0", "input_chars": 155, "input_preview": "I went to the store yesterday and forgot my wallet, which was embarrassing. The ", "status_code": 200, "content_id": "7c457816-4fb0-47cf-bc0f-6a2309a722d1", "guess": "unsure", "confidence": 0.5868, "error": null, "duration_ms": 1300.1}
+{"timestamp": "2026-11-11T23:58:34+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_c2_valid_1", "input_chars": 155, "input_preview": "I went to the store yesterday and forgot my wallet, which was embarrassing. The ", "status_code": 200, "content_id": "2c22c1c2-3559-49b4-ba7f-72062956f06b", "guess": "unsure", "confidence": 0.5868, "error": null, "duration_ms": 1308.7}
+{"timestamp": "2026-11-11T23:58:35+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_c2_valid_2", "input_chars": 155, "input_preview": "I went to the store yesterday and forgot my wallet, which was embarrassing. The ", "status_code": 200, "content_id": "53a86664-c039-40ef-a2a1-a22515c4024b", "guess": "unsure", "confidence": 0.5868, "error": null, "duration_ms": 593.5}
+{"timestamp": "2026-11-11T23:58:35+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_c2_valid_3", "input_chars": 155, "input_preview": "I went to the store yesterday and forgot my wallet, which was embarrassing. The ", "status_code": 200, "content_id": "bf979b73-87e3-489a-90e1-0433a1f39f23", "guess": "unsure", "confidence": 0.5868, "error": null, "duration_ms": 453.6}
+{"timestamp": "2026-11-11T23:58:22+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_junk_control_characters", "input_chars": 6, "input_preview": "\u0000\u0001\u0002 \u0003\u0004", "status_code": 400, "content_id": null, "guess": null, "confidence": null, "error": "bad_request", "duration_ms": 60.5}
+{"timestamp": "2026-11-11T23:58:23+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_junk_punctuation_only", "input_chars": 19, "input_preview": "!!! ??? ... ,,, ;;;", "status_code": 400, "content_id": null, "guess": null, "confidence": null, "error": "bad_request", "duration_ms": 18.4}
+{"timestamp": "2026-11-11T23:58:23+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_junk_one_long_word", "input_chars": 200, "input_preview": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "status_code": 400, "content_id": null, "guess": null, "confidence": null, "error": "bad_request", "duration_ms": 16.6}
+{"timestamp": "2026-11-11T23:58:23+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_junk_emoji_only", "input_chars": 8, "input_preview": "😀😀😀😀😀😀😀😀", "status_code": 400, "content_id": null, "guess": null, "confidence": null, "error": "bad_request", "duration_ms": 10.4}
+{"timestamp": "2026-11-11T23:58:41+00:00", "event": "request", "path": "/submit", "creator_id": "cap_before_1794441502_t1_c2_bad_0", "input_chars": 0, "input_preview": "", "status_code": 400, "content_id": null, "guess": null, "confidence": null, "error": "bad_request", "duration_ms": 11.4}
+```
+
+
+## What It Costs
+
+The service runs locally and calls no paid API, so the cost of a run is $0.00 in spend and a measured amount of compute time. I measured it with the duration_ms field in the log: the warm valid requests from my three "before" trials (30 requests in total, 10 per trial, after the model was loaded). The trial averages were 705 ms, 318 ms and 1,173 ms, and the overall average is 21,967 ms / 30 = **732 ms per run**. The first request after starting the service took 39,242 ms because GPT-2 loads then, and 6,534 ms after my improvement.
+
+For a hundred people a day, if each submits one piece: 100 x 0.732 s = 73 s, about 1.2 minutes of compute a day. If each submits five: 500 x 0.732 s = 366 s, about 6 minutes a day. It costs nothing in fees, and the limit that matters is memory, not money (see What's Still Broken).
+
+## Run Log and Verdicts
+
+Run with `python run_capstone.py --label before` (function run_trial; results in results/capstone_before_1794441502.md), three trials, nothing changed in between. I committed criteria.md in the commit "add capstone criteria" before the commit "capstone first results". Neither signal is random, so identical trials are expected.
+
+| # | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | Junk input gets a 400 | 4 of 4 | 4/4 | 4/4 | 4/4 | MET |
+| 2 | 20 requests logged with a duration | 20 of 20 | 20/20 | 20/20 | 20/20 | MET |
+| 3 | Warm request under 3 s | 9 of 10 | 10/10 | 10/10 | 10/10 | MET |
+| 4 | Bad request gets a 400 and a rejected entry | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 5 | 429 on the 11th request, and 5 of 5 appeals | both hold | pass | pass | pass | MET |
+
+Real output (run_capstone.py, trial 1):
+
+```
+c1 junk -> 400:       4 of 4
+c2 logged w/ time:    20 of 20
+c3 warm under 3s:     10 of 10
+c4 bad -> 400+log:    5 of 5
+c5 429 + appeals:     429 ok | 5 of 5 appeals
+```
+
+All five were met, so my targets were too low. The clearest case is criterion 3: warm requests took 287 to 1,929 ms, far under 3 seconds. A tighter target, **under 1,000 ms in 9 of 10**, would have been MISSED in trial 1 (8 of 10 under 1,000 ms) and trial 3 (5 of 10), because the same machine ran about three times slower in trial 3. Criterion 1 was also weak: it tested the same four inputs I wrote the validation for, and the three-word gibberish "asdf qwer zxcv" passes validation and is scored "human" at 0.2505. I did not revise any criterion.
+
+## The Improvement
+
+**Change:** I load the GPT-2 model when the service starts (app.py::main calls detector.warm_up()) and changed nothing else.
+
+**Why:** the log showed my first request took 39,241.9 ms (duration_ms) because the model loads on that request. No criterion measured it, and a writer or a classmate at Demo Day would hit it first.
+
+**Result:** the first request after starting now takes 6,533.9 ms instead of 39,241.9 ms, about 83% faster. The wait moved to startup, where the model prints "gpt2 loaded and ready." It did not disappear, and the first request is still much slower than a warm one.
+
+**Run Log: After** (`python run_capstone.py --label after`, results/capstone_after_1794443192.md):
+
+| # | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | Junk input gets a 400 | 4 of 4 | 4/4 | 4/4 | 4/4 | MET |
+| 2 | 20 requests logged with a duration | 20 of 20 | 20/20 | 20/20 | 20/20 | MET |
+| 3 | Warm request under 3 s | 9 of 10 | 10/10 | 10/10 | 10/10 | MET |
+| 4 | Bad request gets a 400 and a rejected entry | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 5 | 429 on the 11th request, and 5 of 5 appeals | both hold | pass | pass | 4 of 5 appeals | MISSED |
+
+Real output (run_capstone.py, trial 3):
+
+```
+c3 warm under 3s:     10 of 10
+c4 bad -> 400+log:    5 of 5
+c5 429 + appeals:     429 ok | 4 of 5 appeals
+```
+
+**Did it help?** Yes on the problem I targeted: the cold start fell from 39,242 ms to 6,534 ms. The cost is that criterion 5 went from MET to MISSED in trial 3. I cannot say the change caused that miss: the model is loaded once either way, and the cause below points at memory pressure while Zoom and other apps were open.
+
+**Diagnosis of the miss (criterion 5, trial 3).** Component: the route, app.py::submit, at the call to detector.model_signal. Mechanism: Terminal 1 shows one POST /submit returned 500 with `RuntimeError: ... DefaultCPUAllocator: not enough memory` while GPT-2 was scoring. submit() only catches ValueError and DetectorUnavailable, so the RuntimeError escaped as an unhandled 500. My test script got no content_id for that creator (ap_3), skipped its appeal, and counted 4 of 5. The log has no entry at all for that creator, so the failure left no trace; I believe debug mode re-raises the exception before my logging hook runs, but I did not verify that. When I reran check_appeals.py afterwards it passed 15 of 15 appeals, so the appeal path itself works.
+
+## What's Still Broken
+
+- **Criterion 5 (unhandled model errors).** The first thing I would do next: catch unexpected exceptions around model_signal in submit(), return a 503 with a clear message, and write a rejection entry, so a memory failure is visible and the caller gets an answer instead of a crash. I stopped because the brief allows one improvement, and the cold start was the failure I had already measured.
+- **Gibberish is scored.** "asdf qwer zxcv" has three words, passes validation and is labeled "human" (0.2505). Fixing it needs a check for real words, which is more than one small change.
+- **Edited AI text (EV05) and PI02** from Unit 8 still get "human", because the signals can't see them. I left them out of scope.
+- **Cold start.** The first request still takes about 6.5 seconds.
+- **Memory.** The service needs about 5 GB of free disk and several GB of RAM for PyTorch, so it cannot run on a 512 MB host.
+- **Targets set too low.** I would tighten criterion 3 to under 1,000 ms in 9 of 10, and criterion 1 to include inputs I did not write the validation for.
+
+## How I Used AI
+
+**Moment 1:** I asked Claude for code to reject the junk inputs that my service had scored in the Unit 8 attack run. It gave me a check for control characters and for fewer than three words. I tested it with "!!! ???" (a 400 in 22 ms) and by rerunning the 56-attack set, where all four junk attacks changed to 400 and the right-to-left script was still accepted.
+
+**Moment 2:** When criterion 5 missed in trial 3, I pasted my Terminal 1 output into Claude. It found the out-of-memory RuntimeError in the traceback and pointed out that the creator with no log entry was the one whose submit crashed. I wrote the diagnosis from that evidence and noted what I could not verify. I chose the numbers for my five criteria myself, and Claude drafted the wording and the reasons, which I read before committing.
+
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
